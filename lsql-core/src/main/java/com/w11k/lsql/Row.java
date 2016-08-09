@@ -4,7 +4,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Optional;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.joda.time.DateTime;
 
@@ -35,13 +34,13 @@ public class Row extends ForwardingMap<String, Object> {
         this.data = newHashMap(data);
     }
 
-    public void setDelegate(Map<String, Object> data) {
-        this.data = data;
-    }
+//    public void setDelegate(Map<String, Object> data) {
+//        this.data = data;
+//    }
 
     public Row addKeyVals(Object... keyVals) {
         checkArgument(
-            keyVals.length == 0 || keyVals.length % 2 == 0, "content must be a list of iterant key value pairs.");
+                keyVals.length == 0 || keyVals.length % 2 == 0, "content must be a list of iterant key value pairs.");
 
         Iterable<List<Object>> partition = Iterables.partition(newArrayList(keyVals), 2);
         for (List<Object> objects : partition) {
@@ -58,11 +57,11 @@ public class Row extends ForwardingMap<String, Object> {
         return super.put(key, value);
     }
 
-    public List<String> getKeyList() {
-        return Lists.newLinkedList(keySet());
+    public <A> A getAs(Class<A> type, String key) {
+        return getAs(type, key, false);
     }
 
-    public <A> A getAs(Class<A> type, String key) {
+    public <A> A getAs(Class<A> type, String key, boolean convert) {
         if (!containsKey(key)) {
             throw new IllegalArgumentException("No entry for key '" + key + "'.");
         }
@@ -70,22 +69,26 @@ public class Row extends ForwardingMap<String, Object> {
         if (value == null) {
             return null;
         }
-//        if (!type.isAssignableFrom(value.getClass())) {
-//            return convertWithJackson(type, value);
-//        }
 
         if (type.isAssignableFrom(value.getClass())) {
             return type.cast(value);
-        } else {
+        } else if (convert) {
             try {
                 return LSql.OBJECT_MAPPER.convertValue(value, type);
             } catch (Exception e) {
-                throw new IllegalArgumentException("Row entry for key: '" + key
-                                                       + "', value: '" + value
-                                                       + "', type: '" + value.getClass().getCanonicalName()
-                                                       + "' can not be converted to type '" + type.getCanonicalName() + "'",
-                                                      e);
+                throw new IllegalArgumentException("Row entry for " +
+                        "key: '" + key + "', " +
+                        "value: '" + value + "', " +
+                        "type: '" + value.getClass().getCanonicalName() + "' " +
+                        "can not be converted to type '" + type.getCanonicalName() + "'",
+                        e);
             }
+        } else {
+            throw new IllegalArgumentException("Row entry for " +
+                    "key: '" + key + "', " +
+                    "value: '" + value + "', " +
+                    "type: '" + value.getClass().getCanonicalName() + "' " +
+                    "can not be converted to type '" + type.getCanonicalName() + "'");
         }
     }
 
@@ -143,34 +146,14 @@ public class Row extends ForwardingMap<String, Object> {
     }
 
     @SuppressWarnings("unchecked")
-    public <A> List<A> getListOf(Class<A> clazz, String key) {
+    public <A> List<A> getAsListOf(Class<A> clazz, String key) {
         return (List<A>) get(key);
     }
 
     @SuppressWarnings("unchecked")
-    public <A> Set<A> getSetOf(Class<A> clazz, String key) {
+    public <A> Set<A> getAsSetOf(Class<A> clazz, String key) {
         return (Set<A>) get(key);
     }
-
-    @SuppressWarnings("unchecked")
-    public <A> TreeSet<A> getTreeSetOf(Class<A> clazz, String key) {
-        return (TreeSet<A>) get(key);
-    }
-
-    @SuppressWarnings("unchecked")
-    public LinkedHashMap<Number, Row> getTree(String key) {
-        return getAs(LinkedHashMap.class, key);
-    }
-
-
-//    @SuppressWarnings("unchecked")
-//    public <T extends Row> List<T> getJoined(String key) {
-//        return (List<T>) getListOf(Row.class, key);
-//    }
-
-//    public List<Row> getJoinedRows(String key) {
-//        return getListOf(Row.class, key);
-//    }
 
     public boolean hasNonNullValue(String key) {
         return get(key) != null;
@@ -209,24 +192,9 @@ public class Row extends ForwardingMap<String, Object> {
         return Objects.toStringHelper(this).addValue(delegate()).toString();
     }
 
-//    protected ObjectMapper getObjectMapper() {
-//        return LSql.OBJECT_MAPPER;
-//    }
-
     @Override
     protected Map<String, Object> delegate() {
         return data;
     }
-
-//    private <A> A convertWithJackson(Class<A> expectedType, Object value) {
-//        ObjectMapper mapper = getObjectMapper();
-//        String valString = "\"" + value + "\"";
-//        try {
-//            JsonNode rootNode = mapper.readValue(valString, JsonNode.class);
-//            return mapper.treeToValue(rootNode, expectedType);
-//        } catch (IOException e) {
-//            throw new RuntimeException(e);
-//        }
-//    }
 
 }

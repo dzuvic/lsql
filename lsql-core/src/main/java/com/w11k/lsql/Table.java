@@ -1,8 +1,10 @@
 package com.w11k.lsql;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.w11k.lsql.converter.Converter;
 import com.w11k.lsql.exceptions.DatabaseAccessException;
@@ -10,6 +12,7 @@ import com.w11k.lsql.exceptions.DeleteException;
 import com.w11k.lsql.exceptions.InsertException;
 import com.w11k.lsql.exceptions.UpdateException;
 import com.w11k.lsql.jdbc.ConnectionUtils;
+import com.w11k.lsql.query.RowQuery;
 import com.w11k.lsql.validation.AbstractValidationError;
 import com.w11k.lsql.validation.KeyError;
 
@@ -35,10 +38,6 @@ public class Table {
 
     private Optional<Column> revisionColumn = absent();
 
-    public static Table create(LSql lSql, String tableName) {
-        return new Table(lSql, tableName);
-    }
-
     public Table(LSql lSql, String tableName) {
         this.lSql = lSql;
         this.tableName = tableName;
@@ -59,7 +58,7 @@ public class Table {
     }
 
     public String getTableName() {
-        return tableName;
+        return this.tableName;
     }
 
     public Optional<String> getPrimaryKeyColumn() {
@@ -72,7 +71,6 @@ public class Table {
 
     /**
      * @param columnName the name of the column
-     *
      * @return the column instance
      */
     public synchronized Column column(String columnName) {
@@ -116,20 +114,20 @@ public class Table {
      * will be queried after the insert operation and be put into the passed row.
      *
      * @param row the values to be inserted
-     *
      * @throws InsertException
      */
     public Optional<Object> insert(Row row) {
         try {
             List<String> columns = createColumnList(row);
 
-            PreparedStatement ps = lSql.getDialect().getStatementCreator()
-                    .createInsertStatement(this, columns);
+            PreparedStatement ps =
+                    lSql.getDialect().getStatementCreator().createInsertStatement(this, columns);
+
             setValuesInPreparedStatement(ps, columns, row);
 
             int rowsAffected = ps.executeUpdate();
             if (rowsAffected != 1) {
-                throw new InsertException(rowsAffected + " toList were affected by insert operation. Expected: 1");
+                throw new InsertException(rowsAffected + " rows were affected by insert operation. Expected: 1");
             }
             if (primaryKeyColumn.isPresent()) {
                 Object id = null;
@@ -169,7 +167,6 @@ public class Table {
      * @param row The values used to update the database. The row instance must contain a primary key value and,
      *            if
      *            revision support is enabled, a revision value.
-     *
      * @throws UpdateException
      */
     public void update(Row row) {
@@ -181,11 +178,14 @@ public class Table {
             List<String> columns = createColumnList(row);
             columns.remove(getPrimaryKeyColumn().get());
             if (revisionColumn.isPresent()) {
-                columns.remove(getRevisionColumn().get().getColumnName());
+                columns.remove(getRevisionColumn().get().getJavaColumnName());
             }
 
-            PreparedStatement ps = lSql.getDialect().getStatementCreator()
-                    .createUpdateStatement(this, columns);
+            if (columns.isEmpty()) {
+                return;
+            }
+
+            PreparedStatement ps = lSql.getDialect().getStatementCreator().createUpdateStatement(this, columns);
             setValuesInPreparedStatement(ps, columns, row);
 
             // Set ID
@@ -197,7 +197,7 @@ public class Table {
             // Set Revision
             if (revisionColumn.isPresent()) {
                 Column col = revisionColumn.get();
-                Object revision = row.get(col.getColumnName());
+                Object revision = row.get(col.getJavaColumnName());
                 col.getConverter().setValueInStatement(lSql, ps, columns.size() + 2, revision);
             }
 
@@ -282,7 +282,7 @@ public class Table {
             column.getConverter().setValueInStatement(lSql, ps, 1, id);
             if (revisionColumn.isPresent()) {
                 Column revCol = revisionColumn.get();
-                Object revVal = row.get(revCol.getColumnName());
+                Object revVal = row.get(revCol.getJavaColumnName());
                 if (revVal == null) {
                     throw new IllegalStateException("Row must contain a revision.");
                 }
@@ -298,7 +298,6 @@ public class Table {
      * Loads the row with the given primary key value.
      *
      * @param id the primary key
-     *
      * @return a {@link com.google.common.base.Present} with a {@link Row} instance if the passed primary key
      * values matches a row in the database. {@link com.google.common.base.Absent} otherwise.
      */
@@ -315,11 +314,15 @@ public class Table {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        Query query = new Query(lSql, ps);
-        for (String columnInTable : this.columns.keySet()) {
-            query.addConverter(columnInTable, this.columns.get(columnInTable).getConverter());
+        RowQuery query = new RowQuery(lSql, ps);
+        for (Map.Entry<String, Column> columnInTable : this.columns.entrySet()) {
+            Column value = columnInTable.getValue();
+            if (value.isIgnored()) {
+                continue;
+            }
+            query.addConverter(columnInTable.getKey(), value.getConverter());
         }
-        Optional<Row> first = query.firstRow();
+        Optional<Row> first = query.first();
         if (first.isPresent()) {
             return of(newLinkedRow(first.get()));
         } else {
@@ -414,6 +417,10 @@ public class Table {
         return "Table{tableName='" + tableName + "'}";
     }
 
+    protected Converter getConverter(String javaColumnName, int sqlType) {
+        return this.lSql.getDialect().getConverterRegistry().getConverterForSqlType(sqlType);
+    }
+
     private PreparedStatement createLoadPreparedStatement() {
         Optional<String> primaryKeyColumn = getPrimaryKeyColumn();
         if (!primaryKeyColumn.isPresent()) {
@@ -421,18 +428,23 @@ public class Table {
         }
         String pkColumn = primaryKeyColumn.get();
         Column column = column(pkColumn);
-        String psString = lSql.getDialect().getStatementCreator().createSelectByIdStatement(this, column);
+        String psString = lSql.getDialect().getStatementCreator().createSelectByIdStatement(this, column, this.columns.values());
         return lSql.getDialect().getStatementCreator().createPreparedStatement(lSql, psString, false);
     }
 
-    private List<String> createColumnList(Row row) {
-        List<String> columns = row.getKeyList();
+    private List<String> createColumnList(final Row row) {
+        List<String> columns = Lists.newLinkedList(row.keySet());
         columns = newLinkedList(filter(columns, new Predicate<String>() {
             public boolean apply(String input) {
-                if (column(input) == null) {
-                    throw new RuntimeException("Column " + input + " does not exist in table " + tableName);
+                Column column = column(input);
+                if (column == null) {
+                    String message = "Column '" + input + "' does not exist in table '" + tableName + "'. ";
+                    message += "Known columns: [";
+                    message += Joiner.on(",").join(Table.this.columns.keySet());
+                    message += "]";
+                    throw new RuntimeException(message);
                 }
-                return true;
+                return !column.isIgnored();
             }
         }));
         return columns;
@@ -449,7 +461,7 @@ public class Table {
     private void applyNewRevision(Row row, Object id) throws SQLException {
         if (revisionColumn.isPresent()) {
             Object revision = queryRevision(id);
-            row.put(revisionColumn.get().getColumnName(), revision);
+            row.put(revisionColumn.get().getJavaColumnName(), revision);
         }
     }
 
@@ -468,28 +480,36 @@ public class Table {
         try {
             DatabaseMetaData md = con.getMetaData();
 
+            // Check table name
+            ResultSet tables = md.getTables(null, null, lSql.identifierJavaToSql(this.tableName), null);
+            if (!tables.next()) {
+                throw new IllegalArgumentException("Unknown table '" + tableName + "'");
+            }
+
             // Fetch Primary Key
-            ResultSet primaryKeys = md.getPrimaryKeys(null, null, lSql.getDialect()
-                    .identifierJavaToSql(tableName));
+            ResultSet primaryKeys =
+                    md.getPrimaryKeys(null, null, lSql.identifierJavaToSql(tableName));
+
             if (!primaryKeys.next()) {
                 primaryKeyColumn = Optional.absent();
             } else {
                 String idColumn = primaryKeys.getString(4);
-                primaryKeyColumn = of(lSql.getDialect().identifierSqlToJava(idColumn));
+                primaryKeyColumn = of(lSql.identifierSqlToJava(idColumn));
             }
 
             // Fetch all columns
-            ResultSet columnsMetaData = md.getColumns(null, null, lSql.getDialect()
-                    .identifierJavaToSql(tableName), null);
+            ResultSet columnsMetaData =
+                    md.getColumns(null, null, lSql.identifierJavaToSql(tableName), null);
+
             while (columnsMetaData.next()) {
                 String sqlColumnName = columnsMetaData.getString(4);
                 int columnSize = columnsMetaData.getInt(7);
-                String javaColumnName = lSql.getDialect().identifierSqlToJava(sqlColumnName);
-                int dataType = columnsMetaData.getInt(5);
-                Converter converter = lSql.getDialect().getConverterRegistry().getConverterForSqlType(dataType);
-                Column column = new Column(of(this), javaColumnName, dataType, converter, columnSize);
+                String javaColumnName = lSql.identifierSqlToJava(sqlColumnName);
+                int sqlType = columnsMetaData.getInt(5);
+                Converter converter = getConverter(javaColumnName, sqlType);
+                Column column = new Column(this, javaColumnName, sqlType, converter, columnSize);
                 lSql.getInitColumnCallback().onNewColumn(column);
-                columns.put(javaColumnName, column);
+                this.columns.put(javaColumnName, column);
             }
         } catch (SQLException e) {
             e.printStackTrace();

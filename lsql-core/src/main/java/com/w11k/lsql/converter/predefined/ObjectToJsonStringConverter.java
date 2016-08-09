@@ -27,11 +27,6 @@ public class ObjectToJsonStringConverter extends Converter {
     }
 
     @Override
-    public Object convertValueToTargetType(Object val) {
-        return LSql.OBJECT_MAPPER.convertValue(val, typeReference);
-    }
-
-    @Override
     public boolean isValueValid(Object value) {
         if (value == null && isNullValid()) {
             return true;

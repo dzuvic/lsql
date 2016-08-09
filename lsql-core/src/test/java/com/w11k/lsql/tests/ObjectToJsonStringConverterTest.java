@@ -6,7 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.w11k.lsql.Row;
 import com.w11k.lsql.Table;
 import com.w11k.lsql.converter.predefined.ObjectToJsonStringConverter;
-import com.w11k.lsql.tests.utils.Person;
+import com.w11k.lsql.tests.testdata.Person;
 import org.testng.annotations.Test;
 
 import java.util.List;
@@ -18,12 +18,12 @@ public class ObjectToJsonStringConverterTest extends AbstractLSqlTest {
 
     @Test
     public void pojo() {
-        createTable("CREATE TABLE table1 (id INT PRIMARY KEY, sometext TEXT, person TEXT)");
-        Table t1 = lSql.table("table1");
+        createTable("CREATE TABLE table1 (id INT PRIMARY KEY, person TEXT)");
+        Table t1 = this.lSql.table("table1");
         t1.column("person").setConverter(new ObjectToJsonStringConverter(Person.class, new TypeReference<Person>(){}));
 
-        Person p = new Person("John", "Doe");
-        t1.insert(Row.fromKeyVals("id", 1, "person", p, "sometext", "test"));
+        Person p = new Person(1, "Adam", 30);
+        t1.insert(Row.fromKeyVals("id", 1, "person", p));
         Row row = t1.load(1).get();
         assertEquals(row.get("person"), p);
     }

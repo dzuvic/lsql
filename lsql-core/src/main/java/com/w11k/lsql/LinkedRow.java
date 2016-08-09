@@ -36,7 +36,7 @@ public class LinkedRow extends Row {
      * @return the revision value
      */
     public Object getRevision() {
-        return get(table.getRevisionColumn().get().getColumnName());
+        return get(table.getRevisionColumn().get().getJavaColumnName());
     }
 
     /**
@@ -45,7 +45,7 @@ public class LinkedRow extends Row {
      * @param revision Revision to use for DML statements.
      */
     public void setRevision(Object revision) {
-        put(table.getRevisionColumn().get().getColumnName(), revision);
+        put(table.getRevisionColumn().get().getJavaColumnName(), revision);
     }
 
     /**
@@ -54,7 +54,7 @@ public class LinkedRow extends Row {
     public void removeIdAndRevision() {
         remove(table.getPrimaryKeyColumn().get());
         if (table.getRevisionColumn().isPresent()) {
-            remove(table.getRevisionColumn().get().getColumnName());
+            remove(table.getRevisionColumn().get().getJavaColumnName());
         }
     }
 
@@ -81,7 +81,8 @@ public class LinkedRow extends Row {
             if (table.getColumns().containsKey(key)) {
                 Object val = from.get(key);
                 Converter converter = table.getColumns().get(key).getConverter();
-                val = converter.convertValueToTargetType(val);
+//                val = converter.convertValueToTargetType(this.table.getlSql(), val);
+                converter.failOnWrongValueType(val);
                 put(key, val);
             }
         }
@@ -113,16 +114,16 @@ public class LinkedRow extends Row {
         table.delete(this);
     }
 
+    public <T> T convertTo(Class<T> pojoClass) {
+        PojoMapper<T> mapper = new PojoMapper<T>(pojoClass);
+        return mapper.rowToPojo(this);
+    }
+
     @Override
     public LinkedRow addKeyVals(Object... keyVals) {
         super.addKeyVals(keyVals);
         return this;
     }
-
-//    @Override
-//    protected ObjectMapper getObjectMapper() {
-//        return table.getlSql().getObjectMapper();
-//    }
 
     void setData(Map<String, Object> row) {
         for (String key : row.keySet()) {

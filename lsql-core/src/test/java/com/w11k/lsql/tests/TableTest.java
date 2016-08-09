@@ -7,6 +7,7 @@ import com.w11k.lsql.Table;
 import com.w11k.lsql.exceptions.DatabaseAccessException;
 import com.w11k.lsql.exceptions.InsertException;
 import com.w11k.lsql.exceptions.UpdateException;
+import com.w11k.lsql.tests.testdata.PersonTestData;
 import com.w11k.lsql.validation.AbstractValidationError;
 import com.w11k.lsql.validation.KeyError;
 import com.w11k.lsql.validation.TypeError;
@@ -19,6 +20,12 @@ import java.util.Map;
 import static org.testng.Assert.*;
 
 public class TableTest extends AbstractLSqlTest {
+
+    @Test(expectedExceptions = IllegalArgumentException.class)
+    public void failOnWrongTableName() {
+        createTable("CREATE TABLE namenamenamenamename (id INTEGER PRIMARY KEY, age INT)");
+        lSql.table("wrongwrongwrongwrongwrong");
+    }
 
     @Test
     public void getById() {
@@ -69,7 +76,7 @@ public class TableTest extends AbstractLSqlTest {
         Table table1 = lSql.table("table1");
         Object newId = table1.insert(new Row().addKeyVals("age", 1)).get();
 
-        Row query = lSql.executeRawQuery("select * from table1 where id = " + newId).firstRow().get();
+        Row query = lSql.executeRawQuery("select * from table1 where id = " + newId).first().get();
         assertEquals(query.getInt("age"), (Integer) 1);
     }
 
@@ -141,6 +148,15 @@ public class TableTest extends AbstractLSqlTest {
         row.put("id", 999);
         row.put("name", "John");
         table1.update(row);
+    }
+
+    @Test
+    public void noopOnEmptyColumnListToUpdate() {
+        PersonTestData.init(this.lSql, true);
+        Table person = this.lSql.table("person");
+        person.update(Row.fromKeyVals(
+                "id", 1
+        ));
     }
 
     @Test

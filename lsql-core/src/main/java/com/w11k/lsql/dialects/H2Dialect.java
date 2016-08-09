@@ -1,6 +1,5 @@
 package com.w11k.lsql.dialects;
 
-import com.google.common.base.CaseFormat;
 import com.google.common.base.Optional;
 import com.w11k.lsql.Table;
 
@@ -8,19 +7,11 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 
-public class H2Dialect extends BaseDialect {
+public class H2Dialect extends GenericDialect {
 
-    @Override
-    public CaseFormat getSqlCaseFormat() {
-        return CaseFormat.UPPER_UNDERSCORE;
+    public H2Dialect() {
+        setIdentifierConverter(IdentifierConverter.JAVA_CAMEL_CASE_TO_SQL_UPPER_UNDERSCORE);
     }
-
-//    @Override
-//    public String getTableNameFromResultSetMetaData(ResultSetMetaData metaData, int columnIndex) throws SQLException {
-//        JdbcResultSetMetaData h2meta = (JdbcResultSetMetaData) metaData;
-//        return h2meta.getTableName(columnIndex);
-//        return super.getTableNameFromResultSetMetaData(metaData, columnIndex);
-//    }
 
     public Optional<Object> extractGeneratedPk(Table table,
                                                ResultSet resultSet) throws SQLException {
