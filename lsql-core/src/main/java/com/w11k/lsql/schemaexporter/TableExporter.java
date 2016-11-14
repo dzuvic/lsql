@@ -26,7 +26,7 @@ public class TableExporter {
     public void export() {
         StringBuilder sb = new StringBuilder();
         sb.append("package ").append(this.schemaExporter.getPackageName()).append(";\n\n");
-        sb.append("class ").append(nameToIdentifier(this.table.getTableName())).append(" {\n\n");
+        sb.append("public class ").append(nameToIdentifier(this.table.getTableName())).append(" {\n\n");
 
         // Field instances
         for (Map.Entry<String, Column> entry : this.table.getColumns().entrySet()) {
@@ -61,7 +61,10 @@ public class TableExporter {
         sb.append("    public ");
         sb.append(entry.getValue().getConverter().getJavaType().getCanonicalName());
         sb.append(" ");
-        sb.append("get").append(nameToIdentifier(entry.getKey())).append("() {\n");
+
+        boolean isBool = Boolean.class.isAssignableFrom(entry.getValue().getConverter().getJavaType());
+        String prefix = isBool ? "is" : "get";
+        sb.append(prefix).append(nameToIdentifier(entry.getKey())).append("() {\n");
         sb.append("        return this.").append(entry.getKey()).append(";\n");
         sb.append("    }\n\n");
 
@@ -77,7 +80,7 @@ public class TableExporter {
         sb.append("    }\n\n");
     }
 
-    public String nameToIdentifier(String name) {
+    protected String nameToIdentifier(String name) {
         return name.substring(0, 1).toUpperCase() + name.substring(1);
     }
 }
